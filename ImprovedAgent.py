@@ -1,74 +1,55 @@
-import minesweeperVScode
-import numpy as np
+import itertools
 import random
 import Clue
+import Environment
 
 
-# newEnvironment = minesweeperVScode.Environment # Load original environment -> used to compare with moves and update
-
-
-class BasicAgent():
+class ImprovedAgent():
     """
-    Represents Basic Agent
-    Tasks: For each cell, keep track of:
-            – if safe, the number of mines surrounding it indicated by the clue
-            – the number of safe squares identified around it
-            – the number of mines identified around it.
-            – the number of hidden squares around it.
-
-    2)  • If, for a given cell, the total number of mines (the clue) minus the number of revealed mines is the number of
-            hidden neighbors, every hidden neighbor is a mine.
-
-    3)  • If, for a given cell, the total number of safe neighbors (8 - clue) minus the number of revealed safe neighbors is
-            the number of hidden neighbors, every hidden neighbor is safe.
-
-    4)  • If a cell is identified as safe, reveal it and update your information.
-
-    5)  • If a cell is identified as a mine, mark it and update your information.
-
-    6)  • The above steps can be repeated until no more hidden cells can be conclusively identified.
-
-    7)  • If no hidden cell can be conclusively identified as a mine or safe, pick a cell to reveal uniformly at random from
-            the remaining cells.
+    Minesweeper game player
     """
 
-    def __init__(self, height=8, width=8):
+    def __init__(self, height=50, width=50):
 
-        # Set initial height and width
+        # Initialize the initial dimensions, height and width of the board
         self.height = height
         self.width = width
 
         # Keep track of which cells have been clicked on
-        self.moves_made = set()
-        self.all_possible_cells = set()
+        self.track_moves = set()
+        self.total_cells = set()
         for h in range(height):
             for w in range(width):
-                self.all_possible_cells.add((h, w))  # adds all locations (x,y) into all cells
+                self.total_cells.add((h, w))  # adds all locations (x,y) into all cells
 
         # Keep track of cells known to be safe or mines
-        self.mines = set()
-        self.safes = set()
+        self.mineSet = set()
+        self.safeSet = set()
 
-        # List of clues (set of cells and count of how many are mines) about the game known to be true
+        # Set of sentences about the game known to be true
         self.knowledgeBase = []
 
-    def mark_mine(self, cell):
+    def MarkMine(self, cell):
         """
         Marks a cell as a mine, and updates all knowledge
         to mark that cell as a mine as well.
         """
-        self.mines.add(cell)
+        counter = 0
+        self.mineSet.add(cell)
         for clue in self.knowledgeBase:
-            clue.mark_mine(cell)
+            counter = counter + clue.MarkMine(cell)
+        return counter
 
-    def mark_safe(self, cell):
+    def MarkSafe(self, cell):
         """
         Marks a cell as safe, and updates all knowledge
         to mark that cell as safe as well.
         """
-        # Remove addition of self.safes because of different algorithm
+        counter = 0
+        self.safeSet.add(cell)
         for clue in self.knowledgeBase:
-            clue.mark_safe(cell)
+            counter = counter + clue.MarkSafe(cell)
+        return counter
 
     def add_knowledge(self, cell, count):
         """
@@ -84,98 +65,155 @@ class BasicAgent():
             5) add any new sentences to the AI's knowledge base
                if they can be inferred from existing knowledge
         """
-        self.moves_made.add(cell)
-        self.mark_safe(cell)
+        # mark the cell as a move that has been made
+        self.track_moves.add(cell)
 
-        new_knowledge_cells = []
+        # mark the cell as safe
+        self.MarkSafe(cell)
 
-        # Loop over 3x3 cells and appending untouched cells to new_knowledge_cells
-        for i in range(cell[0] - 1, cell[0] + 2):
-            for j in range(cell[1] - 1, cell[1] + 2):
+        # add new sentence
+        # find neighbors
+        i, j = cell
+        neighboringCells = set()
+        for row in range(max(0, i - 1), min(i + 2, self.height)):
+            for col in range(max(0, j - 1), min(j + 2, self.width)):
+                if (row, col) != (i, j): # ignores the cell itself, and parses through neighboring cells and adds it to set of neighbors
+                    neighboringCells.add((row, col))
+        # add neighbors and value to sentence
+        self.knowledgeBase.append(Clue.Clue(neighboringCells, count))
 
-                # Ignore the cell itself
-                if (i, j) == cell:
-                    continue
+        # mark additional cells as safe or mines
+        self.updateKnowledgeBase()
 
-                # Update count if cell in bounds and is mine
-                if 0 <= i < self.height and 0 <= j < self.width:  # in bounds
-                    if (i, j) not in self.moves_made and (i, j) not in self.safes:
-                        new_knowledge_cells.append((i, j))  # for a given move, check if cell location is in set of moves_made or in set of safes
+        inferences = self.new_inferences()
 
-        # Appending the new Knowledge
-        if len(new_knowledge_cells) != 0:
-            self.knowledgeBase.append(Clue.Clue(new_knowledge_cells, count))
+        while inferences:
+            for clue in inferences:
+                self.knowledgeBase.append(clue)
 
-        while self.minify_knowledgebase() != self.knowledgeBase:
-            pass
+            # mark additional cells as safe or mines
+            self.updateKnowledgeBase()
 
-        print("\n\n\n\n")
-        print("------------------------------------------------------------------")
-
+            inferences = self.new_inferences()
         print("\nMove: ", cell)
 
-        print("Knowledge Base:")
-        for clue in self.knowledgeBase:
-            print(clue)
+        while self.SimplifyKnowledgeBase() != self.knowledgeBase:
+            pass
 
-        print("\nConfirmed Safe:")
-        print(self.safes)
+    def SimplifyKnowledgeBase(self):
+        """
+        Copy current knowledge base and iterate through each clue. Put the safes from each
 
-        print("\nConfirmed Mines:")
-        print(self.mines)
-        print("------------------------------------------------------------------")
+        """
+        GoThroughClues = self.knowledgeBase.copy()
 
-    def make_safe_move(self):
+        for clue in GoThroughClues:
+            SafesQueried = clue.SafesKnown()  # call known_safes function from the Clue class, returns set of safe cells and stores in known_safes
+            MinesQueried = clue.MinesKnown()  # call known_mines function from the Clue class, returns set of mine cells and stores in known_mines
+
+            if SafesQueried:
+                self.safeSet.update(SafesQueried)  # Update a set with the union of itself and others.
+                self.knowledgeBase.remove(clue)
+
+            if MinesQueried:
+                self.knowledgeBase.remove(clue)
+                for mine in MinesQueried.union(
+                        self.mineSet):  # if there is an overlap between known_mines and self.mines, mark the mine
+                    self.MarkMine(mine)
+
+        return self.knowledgeBase
+
+    def move_safely(self):
         """
         Returns a safe cell to choose on the Minesweeper board.
         The move must be known to be safe, and not already a move
         that has been made.
         This function may use the knowledge in self.mines, self.safes
-        and self.moves_made, but should not modify any of those values.
+        and self.track_moves, but should not modify any of those values.
         """
-        if len(self.safes) > 0:
-            return self.safes.pop()
-        else:
-            return None
+        for move in self.safeSet:
+            if move not in self.track_moves and move not in self.mineSet:
+                self.print_data()
+                return move
 
-    def make_random_move(self):
+        return None
+
+    def move_randomly(self):
         """
         Returns a move to make on the Minesweeper board.
         Should choose randomly among cells that:
             1) have not already been chosen, and
             2) are not known to be mines
         """
-        freeSets = self.all_possible_cells - self.moves_made - self.mines  # makes a move that has not already been made and is known to not be a mine
+        freeSets = self.total_cells - self.track_moves - self.mineSet  # makes a move that has not already been made and is known to not be a mine
         if len(freeSets) > 0:
             return random.choice(tuple(freeSets))
         else:
             return None
 
-    def minify_knowledgebase(self):
-        """
-        Copy current knowledge base and iterate through each clue. Put the safes from each
+    def print_data(self):
+        print("\n\n\n")
+        print("------------------------------------------------------------------")
+        print("KnowlegeBase: ")
+        for clue in self.knowledgeBase:
+            print("\t", clue.cells, " = ", clue.count)
+        print("\nConfirmed Safe:")
+        print(self.safeSet)
 
-        """
-        knowledge_to_iterate = self.knowledgeBase.copy()
+        print("\nConfirmed Mines:")
+        print(self.mineSet)
+        print("------------------------------------------------------------------")
 
-        for clue in knowledge_to_iterate:
-            known_safes = clue.known_safes()  # call known_safes function from the Clue class, returns set of safe cells and stores in known_safes
-            known_mines = clue.known_mines()  # call known_mines function from the Clue class, returns set of mine cells and stores in known_mines
+    def new_inferences(self):
+        inferences = []
+        removals = []
 
-            if known_safes:
-                self.safes.update(known_safes)
-                self.knowledgeBase.remove(clue)
+        # for each sentence known
+        for clue1 in self.knowledgeBase:
+            # mark for removal if it is empty
+            if clue1.cells == set():
+                removals.append(clue1)
+                continue
+            # pick another
+            for clue2 in self.knowledgeBase:
+                # mark for removal if empty
+                if clue2.cells == set():
+                    removals.append(clue2)
+                    continue
+                # make sure they're different sentences
+                if clue1 != clue2:
+                    # if s2 is a subset of s1
+                    if clue2.cells.issubset(clue1.cells):
+                        diff_cells = clue1.cells.difference(clue2.cells)
+                        diff_count = clue1.count - clue2.count
+                        # an inference can be drawn
+                        new_inference = Clue.Clue(diff_cells, diff_count)
+                        if new_inference not in self.knowledgeBase:
+                            inferences.append(new_inference)
 
-            if known_mines:
-                self.knowledgeBase.remove(clue)
-                for mine in known_mines.union(
-                        self.mines):  # if there is an overlap between known_mines and self.mines, mark the mine
-                    self.mark_mine(mine)
+        # remove sentences without any cells
+        self.knowledgeBase = [x for x in self.knowledgeBase if x not in removals]
+        return inferences
 
-        return self.knowledgeBase
+    def updateKnowledgeBase(self):
+        # repeat update if an update was made in the previous cycle
+        counter = 1
+        while counter:
+            counter = 0
+            for clue in self.knowledgeBase:
+                for cell in clue.SafesKnown():
+                    self.MarkSafe(cell)
+                    counter += 1
+                for cell in clue.MinesKnown():
+                    self.MarkMine(cell)
+                    counter += 1
+            for cell in self.safeSet:
+                counter += self.MarkSafe(cell)
+            for cell in self.mineSet:
+                counter += self.MarkMine(cell)
 
     def getFlags(self):
         """
         Return all mines found till now
         """
-        return self.mines
+        return self.mineSet
