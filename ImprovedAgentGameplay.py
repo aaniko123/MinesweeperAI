@@ -5,9 +5,9 @@ import ImprovedAgent
 import Environment
 import pygame
 
-HEIGHT = 50
-WIDTH = 50
-MINES = 100
+HEIGHT = 10
+WIDTH = 10
+MINES = 15
 
 # Colors
 MAGENTA = (255, 0, 255)
@@ -17,7 +17,7 @@ WHITE = (255, 255, 255)
 
 # Create game
 pygame.init()
-size = width, height = 900, 600
+size = width, height = 1050, 700
 screen = pygame.display.set_mode(size)
 
 # Fonts
@@ -220,7 +220,7 @@ while True:
             else:
                 print("AI making safe move.")
             # Added Code to Update Flags in RealTime
-            for ai_mine in ai.getFlags():
+            for ai_mine in ai.FlagCells():
                 flags.add(ai_mine)
             time.sleep(0.2)
 

@@ -34,29 +34,29 @@ class BasicAgent():
 
     def __init__(self, height=50, width=50):
 
-        # Set initial height and width
+        # Initialize the dimensions of the board,set the height and width
         self.height = height
         self.width = width
 
-        # Keep track of which cells have been clicked on
-        self.track_moves = set()
-        self.total_cells = set()
-        for h in range(height):
-            for w in range(width):
-                self.total_cells.add((h, w))  # adds all locations (x,y) into all cells
+        self.track_moves = set()  # Keep a track of the moves which have been made
+        self.total_cells = set()  # as well as a set of all board cells -> total cells
 
-        # Keep track of cells known to be safe or mines
-        self.mineSet = set()
-        self.safeSet = set()
+        for x in range(height):
+            for y in range(width):
+                self.total_cells.add((x, y))  # adds all locations (x,y) into all cells
 
-        # List of clues (set of cells and count of how many are mines) about the game known to be true
+        self.mineSet = set()  # keep a track of the board cells known to be mines
+        self.safeSet = set()  # keep a track of the board cells known to be safes
+
+        # List of clues (set of cells and count of how many are mines)
         self.knowledgeBase = []
-        # [(set of cells = count), (set2 of cells = count), (set3 of cells = count)]
+        # Example knowledge base: [((set of cells) = count), ((set2 of cells) = count), ((set3 of cells) = count)]
 
     def MarkMine(self, cell):
         """
-        Marks a cell as a mine, and updates all knowledge
-        to mark that cell as a mine as well.
+        Add the cell to the set of board cells known to be mines.
+        For each clue in the knowledge base, mark the cell as a mine as well.
+        This updates the cell as a mine in the total knowledge base.
         """
         self.mineSet.add(cell)
         for clue in self.knowledgeBase:
@@ -64,33 +64,30 @@ class BasicAgent():
 
     def MarkSafe(self, cell):
         """
-        Marks a cell as safe, and updates all knowledge
-        to mark that cell as safe as well.
+        Add the cell to the set of board cells known to be safes.
+        For each clue in the knowledge base, mark the cell as a safe as well.
+        This updates the cell as a safe in the total knowledge base.
         """
-        # Remove addition of self.safes because of different algorithm
         for clue in self.knowledgeBase:
             clue.MarkSafe(cell)
 
     def add_knowledge(self, cell, count):
         """
-        Called when the Minesweeper board tells us, for a given
-        safe cell, how many neighboring cells have mines in them.
-        This function should:
-            1) mark the cell as a move that has been made
-            2) mark the cell as safe
-            3) add a new sentence to the AI's knowledge base
-               based on the value of `cell` and `count`
-            4) mark any additional cells as safe or as mines
-               if it can be concluded based on the AI's knowledge base
-            5) add any new sentences to the AI's knowledge base
-               if they can be inferred from existing knowledge
+        The knowledge base is updated based on how many mines surround a safe cell (the clue)
+        This function adds a cell to the set of moves that have been made, mark the current cell as safe,
+        adds a new clue to the knowledge base using the cell and count given within function parameters,
+        mark any other cell as safe or mine that can be inferred using basic inference techniques, and finally update
+        the knowledge base with any new clues that can be inferred.
         """
+
+        # add cell to list of moves that have been made
         self.track_moves.add(cell)
+
+        # add cell to list of safe cells
         self.MarkSafe(cell)
 
         updatedKnowledgeBase = []
-
-        # Loop over 3x3 cells and appending untouched cells to new_knowledge_cells
+        # parse through the neighbors/surrounding cells of the current cell
         for i in range(cell[0] - 1, cell[0] + 2):
             for j in range(cell[1] - 1, cell[1] + 2):
 
@@ -98,86 +95,89 @@ class BasicAgent():
                 if (i, j) == cell:
                     continue
 
-                # Update count if cell in bounds and is mine
+                # If the cell is within board dimensions, and is identified to be a mine, add it as a new knowledge
                 if 0 <= i < self.height and 0 <= j < self.width:  # in bounds
                     if (i, j) not in self.track_moves and (i, j) not in self.safeSet:
-                        updatedKnowledgeBase.append((i,
-                                                    j))  # for a given move, check if cell location is in set of moves_made or in set of safes
+                        updatedKnowledgeBase.append((i, j))
+                        # for a given move, check if cell location is in set of moves_made or in set of safes
 
-        # Appending the new Knowledge
+        # add the new Knowledge to the knowledge base, calling the Clue class
         if len(updatedKnowledgeBase) != 0:
             self.knowledgeBase.append(Clue.Clue(updatedKnowledgeBase, count))
 
         while self.SimplifyKnowledgeBase() != self.knowledgeBase:
             pass
 
+        """
+        Print a text based representation of the sets for easy user viewing within the terminal
+        USE FOR TESTING OUTPUTS!!
+        """
         print("\n\n\n\n")
         print("------------------------------------------------------------------")
-
-        print("\nMove: ", cell)
-
-        print("Knowledge Base:")
+        print("\nCurrent move made: ", cell)
+        print("Current Knowledge Base: ")
         for clue in self.knowledgeBase:
             print(clue)
-
-        print("\nConfirmed Safe:")
+        print("\nConfirmed Safe Cells: ")
         print(self.safeSet)
 
-        print("\nConfirmed Mines:")
+        print("\nConfirmed Mine Cells: ")
         print(self.mineSet)
         print("------------------------------------------------------------------")
 
     def move_safely(self):
         """
-        Returns a safe cell to choose on the Minesweeper board.
-        The move must be known to be safe, and not already a move
-        that has been made.
-        This function may use the knowledge in self.mines, self.safes
-        and self.moves_made, but should not modify any of those values.
+        Picks a safe move from the set of safe moves (safeSet) available to make. If there is not a safe move to be made
+        the function does not return anything
         """
         if len(self.safeSet) > 0:
             return self.safeSet.pop()
         else:
+            print("No safe moves to be made :(")
             return None
 
     def move_randomly(self):
         """
-        Returns a move to make on the Minesweeper board.
-        Should choose randomly among cells that:
-            1) have not already been chosen, and
-            2) are not known to be mines
+        Picks a random move from the set of moves that are available to make (total board cells - moves that have
+        already been made - moves that have been identified as mines). If there is not a random move, available moves ≤ 0
+        to be made the function does not return anything
         """
-        freeSets = self.total_cells - self.track_moves - self.mineSet  # makes a move that has not already been made and is known to not be a mine
-        if len(freeSets) > 0:
-            return random.choice(tuple(freeSets))
+        availableMoves = self.total_cells - self.track_moves - self.mineSet  # makes a move that has not already been made and is known to not be a mine
+        if len(availableMoves) > 0:
+            return random.choice(tuple(availableMoves))
         else:
             return None
 
     def SimplifyKnowledgeBase(self):
         """
-        Copy current knowledge base and iterate through each clue. Put the safes from each
-
+        Make a copy of the current knowledge base and iterate through each clue. For each clue, retrieve the known safes
+        & known mines. Iterate through each set, and update it with the union of both and remove it from the knowledge
+        base.
         """
+
+        # make a copy of the current knowledge base
         GoThroughClues = self.knowledgeBase.copy()
 
-        for clue in GoThroughClues:
-            SafesQueried = clue.SafesKnown()  # call known_safes function from the Clue class, returns set of safe cells and stores in known_safes
-            MinesQueried = clue.MinesKnown()  # call known_mines function from the Clue class, returns set of mine cells and stores in known_mines
+        for clue in GoThroughClues:  # Queries all the clues in the knowledge base
+            # call known_safes function from the Clue class, returns set of safe cells and stores in known_safes
+            SafesQueried = clue.SafesKnown()
+            # call known_mines function from the Clue class, returns set of mine cells and stores in known_mines
+            MinesQueried = clue.MinesKnown()
 
             if SafesQueried:
-                self.safeSet.update(SafesQueried)  # Update a set with the union of itself and others.
-                self.knowledgeBase.remove(clue)
+                self.safeSet.update(SafesQueried)  # Add to safeSet
+                self.knowledgeBase.remove(clue)  # remove clue from the knowledge base
 
             if MinesQueried:
-                self.knowledgeBase.remove(clue)
-                for mine in MinesQueried.union(
-                        self.mineSet):  # if there is an overlap between known_mines and self.mines, mark the mine
+                self.knowledgeBase.remove(clue)  # remove clue from knowledge base
+                for mine in MinesQueried.union(self.mineSet):
+                    # if there is an overlap between known_mines and self.mines, mark the mine
                     self.MarkMine(mine)
 
         return self.knowledgeBase
 
-    def getFlags(self):
+    def FlagCells(self):
         """
-        Return all mines found till now
+        Return the set of all mines (mineSet) that have been identified up to current point
         """
         return self.mineSet
