@@ -1,4 +1,9 @@
-README
+MinesweeperAI_README
+
+NOTE:
+
+PLEASE TYPE IN "pip3 install pygame" AND "pip3 install termcolor" WITHIN THE TERMINAL BEFORE
+RUNNING THE GAMEPLAY CLASSES
 
 Environment.py Instructions:
 
